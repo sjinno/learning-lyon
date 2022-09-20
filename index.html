@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="./style.css" />
+    <title>Lyon Playground</title>
+  </head>
+  <body>
+    <div id="wgpu-example"></div>
+    <canvas id="canvas"></canvas>
+
+    <script>
+      const canvas = document.getElementById('canvas');
+      const scale = 2;
+      canvas.width = 1280 * scale;
+      canvas.height = 739 * scale;
+
+      const ctx = canvas.getContext('2d');
+
+      // Big green rectangle.
+      ctx.fillStyle = '#2a9d8f';
+      ctx.fillRect(500, 250, 200, 100);
+
+      // Line.
+      ctx.beginPath();
+      ctx.moveTo(700, 350);
+      ctx.lineTo(1000, 350);
+      ctx.stroke();
+
+      // Small light blue rectagle.
+      ctx.fillStyle = '#a2d2ff';
+      ctx.fillRect(1000, 350, 100, 50);
+
+      // Middle size yellow rectangle.
+      ctx.fillStyle = '#e9c46a';
+      ctx.fillRect(775, 300, 150, 75);
+
+      // Wasm stuff goes under here.
+    </script>
+  </body>
+</html>
