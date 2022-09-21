@@ -9,35 +9,38 @@
   </head>
   <body>
     <div id="wgpu-example"></div>
-    <canvas id="canvas"></canvas>
+    <script type="module">
+      // const canvas = document.getElementById('canvas');
+      // const scale = 2;
+      // canvas.width = 1280 * scale;
+      // canvas.height = 739 * scale;
 
-    <script>
-      const canvas = document.getElementById('canvas');
-      const scale = 2;
-      canvas.width = 1280 * scale;
-      canvas.height = 739 * scale;
+      // const ctx = canvas.getContext('2d');
 
-      const ctx = canvas.getContext('2d');
+      // // Big green rectangle.
+      // ctx.fillStyle = '#2a9d8f';
+      // ctx.fillRect(500, 250, 200, 100);
 
-      // Big green rectangle.
-      ctx.fillStyle = '#2a9d8f';
-      ctx.fillRect(500, 250, 200, 100);
+      // // Line.
+      // ctx.beginPath();
+      // ctx.moveTo(700, 350);
+      // ctx.lineTo(1000, 350);
+      // ctx.stroke();
 
-      // Line.
-      ctx.beginPath();
-      ctx.moveTo(700, 350);
-      ctx.lineTo(1000, 350);
-      ctx.stroke();
+      // // Small light blue rectagle.
+      // ctx.fillStyle = '#a2d2ff';
+      // ctx.fillRect(1000, 350, 100, 50);
 
-      // Small light blue rectagle.
-      ctx.fillStyle = '#a2d2ff';
-      ctx.fillRect(1000, 350, 100, 50);
-
-      // Middle size yellow rectangle.
-      ctx.fillStyle = '#e9c46a';
-      ctx.fillRect(775, 300, 150, 75);
+      // // Middle size yellow rectangle.
+      // ctx.fillStyle = '#e9c46a';
+      // ctx.fillRect(775, 300, 150, 75);
 
       // Wasm stuff goes under here.
+      import init from './pkg/wgpu_lyon.js';
+      init().then((wasm) => {
+        console.log('SHOHEI@index.html:43: wasm =', wasm);
+        wasm.run();
+      });
     </script>
   </body>
 </html>
