@@ -1,5 +1,6 @@
 use std::iter;
 
+use lyon::geom::{CubicBezierSegment, Point};
 use wgpu::util::DeviceExt;
 use winit::{
     event::*,
@@ -13,10 +14,10 @@ use log::{debug, info, Level};
 use wasm_bindgen::prelude::*;
 
 const VERTICES: &[Vertex] = &[
-    Vertex {
-        position: [0.0, 0.5, 0.0],
-        color: [1.0, 0.0, 0.0],
-    },
+    // Vertex {
+    //     position: [0.0, 0.5, 0.0],
+    //     color: [1.0, 0.0, 0.0],
+    // },
     Vertex {
         position: [-0.5, -0.5, 0.0],
         color: [0.0, 1.0, 0.0],
@@ -103,6 +104,42 @@ struct State {
 impl State {
     // Creating some of the wgpu types requires async code
     async fn new(window: &Window) -> Self {
+        let cb_curve = CubicBezierSegment {
+            from: Point {
+                x: VERTICES[0].position[0],
+                y: VERTICES[0].position[1],
+                ..Default::default()
+            },
+            ctrl1: Point {
+                x: VERTICES[0].position[0] + 0.3,
+                y: VERTICES[0].position[1] - 0.5,
+                ..Default::default()
+            },
+            ctrl2: Point {
+                x: VERTICES[0].position[0] + 0.4,
+                y: VERTICES[0].position[1] + 0.8,
+                ..Default::default()
+            },
+            to: Point {
+                x: VERTICES[1].position[0],
+                y: VERTICES[1].position[1],
+                ..Default::default()
+            },
+        };
+
+        let flattened = cb_curve.flattened(0.002);
+        // while let Some(p) = flattened.next() {
+        //     eprintln!("{:?}", p);
+        // }
+
+        let vertices = flattened
+            .into_iter()
+            .map(|p| Vertex {
+                position: [p.x, p.y, 0.0],
+                color: [1.0, 0.0, 0.0],
+            })
+            .collect::<Vec<Vertex>>();
+
         let size = window.inner_size();
 
         let instance = wgpu::Instance::new(wgpu::Backends::all());
@@ -173,7 +210,7 @@ impl State {
                 })],
             }),
             primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList, // 1.
+                topology: wgpu::PrimitiveTopology::LineStrip, // 1.
                 strip_index_format: None,
                 front_face: wgpu::FrontFace::Ccw, // 2.
                 cull_mode: Some(wgpu::Face::Back),
@@ -195,11 +232,11 @@ impl State {
 
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(VERTICES),
+            contents: bytemuck::cast_slice(&vertices),
             usage: wgpu::BufferUsages::VERTEX,
         });
 
-        let num_vertices = VERTICES.len() as u32;
+        let num_vertices = vertices.len() as u32;
 
         Self {
             surface,
