@@ -4,6 +4,15 @@
     padding: 0;
 }
 
+#wasm-example {
+    width: 100vw;
+    height: 100vh;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
 canvas {
     background-color: #edede9;
     width: 1280px;
