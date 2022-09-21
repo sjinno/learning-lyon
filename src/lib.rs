@@ -1,7 +1,7 @@
 use winit::{
     event::*,
     event_loop::{ControlFlow, EventLoop},
-    window::WindowBuilder,
+    window::{Window, WindowBuilder},
 };
 
 use log::{debug, info, Level};
@@ -9,8 +9,7 @@ use log::{debug, info, Level};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
-pub async fn run() {
+fn init_logger() {
     cfg_if::cfg_if! {
         if #[cfg(target_arch = "wasm32")] {
             console_log::init_with_level(Level::Debug);
@@ -21,10 +20,9 @@ pub async fn run() {
     }
 
     debug!("It works!");
+}
 
-    let event_loop = EventLoop::new();
-    let window = WindowBuilder::new().build(&event_loop).unwrap();
-
+fn create_canvas(window: &Window) {
     #[cfg(target_arch = "wasm32")]
     {
         // Winit prevents sizing with CSS, so we have to set
@@ -42,6 +40,21 @@ pub async fn run() {
                 Some(())
             })
             .expect("Couldn't append canvas to document body.");
+    }
+}
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
+pub async fn run() {
+    init_logger();
+
+    let event_loop = EventLoop::new();
+    let window = WindowBuilder::new().build(&event_loop).unwrap();
+
+    cfg_if::cfg_if! {
+        if #[cfg(target_arch = "wasm32")] {
+            create_canvas(&window);
+            info!("Canvas successfully created!");
+        }
     }
 
     event_loop.run(move |event, _, control_flow| match event {
