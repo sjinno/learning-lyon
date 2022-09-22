@@ -4,7 +4,7 @@ extern crate lyon;
 use lyon::math::{point, Point};
 use lyon::path::builder::*;
 use lyon::path::Path;
-use lyon::tessellation::*;
+use lyon::tessellation::{self, *};
 
 // use lyon::geom::{CubicBezierSegment, Point};
 use wgpu::util::DeviceExt;
@@ -116,6 +116,7 @@ struct State {
     num_vertices: u32,
     index_buffer: wgpu::Buffer,
     num_indices: u32,
+    stroke_range: std::ops::Range<u32>,
 }
 
 impl State {
@@ -175,11 +176,14 @@ impl State {
         // Will contain the result of the tessellation.
         let mut geometry: VertexBuffers<Vertex, u16> = VertexBuffers::new();
 
-        let mut tessellator = FillTessellator::new();
+        // let mut tessellator = StrokeTessellator::new();
+
+        let mut fill_tess = FillTessellator::new();
+        let mut stroke_tess = StrokeTessellator::new();
 
         {
             // Compute the tessellation.
-            tessellator
+            fill_tess
                 .tessellate_path(
                     &path,
                     &FillOptions::default(),
@@ -191,6 +195,24 @@ impl State {
                 .unwrap();
         }
 
+        let fill_range = 0..(geometry.indices.len() as u32);
+
+        {
+            // Compute the tessellation.
+            stroke_tess
+                .tessellate_path(
+                    &path,
+                    &StrokeOptions::default(),
+                    &mut BuffersBuilder::new(&mut geometry, |vertex: StrokeVertex| Vertex {
+                        position: [vertex.position().x / 2.5, vertex.position().y / 2.5, 0.0],
+                        color: [1.0, 1.0, 0.0],
+                    }),
+                )
+                .unwrap();
+        }
+
+        let stroke_range = fill_range.end..(geometry.indices.len() as u32);
+
         // // The tessellated geometry is ready to be uploaded to the GPU.
         // println!(
         //     " -- {} vertices {} indices",
@@ -199,7 +221,7 @@ impl State {
         // );
 
         let vertices = geometry.vertices;
-        eprintln!("VERTICES {vertices:?}");
+        eprintln!("VERTICES {vertices:#?}");
 
         let indices = geometry.indices;
         eprintln!("INDICES {indices:?}");
@@ -219,6 +241,7 @@ impl State {
             .request_device(
                 &wgpu::DeviceDescriptor {
                     features: wgpu::Features::empty(),
+                    // features: wgpu::Features::POLYGON_MODE_LINE,
                     limits: if cfg!(target_arch = "wasm32") {
                         wgpu::Limits::downlevel_webgl2_defaults()
                     } else {
@@ -275,14 +298,15 @@ impl State {
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleStrip, // 1.
                 strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw, // 2.
-                cull_mode: Some(wgpu::Face::Back),
-                // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
                 polygon_mode: wgpu::PolygonMode::Fill,
-                // Requires Features::DEPTH_CLIP_CONTROL
-                unclipped_depth: false,
-                // Requires Features::CONSERVATIVE_RASTERIZATION
-                conservative: false,
+                ..Default::default() // front_face: wgpu::FrontFace::Ccw, // 2.
+                                     // cull_mode: Some(wgpu::Face::Back),
+                                     // // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
+                                     // polygon_mode: wgpu::PolygonMode::Fill,
+                                     // // Requires Features::DEPTH_CLIP_CONTROL
+                                     // unclipped_depth: false,
+                                     // // Requires Features::CONSERVATIVE_RASTERIZATION
+                                     // conservative: false,
             },
             depth_stencil: None, // 1.
             multisample: wgpu::MultisampleState {
@@ -318,6 +342,7 @@ impl State {
             num_vertices,
             index_buffer,
             num_indices,
+            stroke_range,
         }
     }
 
@@ -374,10 +399,18 @@ impl State {
             // render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             // render_pass.draw(0..self.num_vertices, 0..1);
 
+            // render_pass.set_pipeline(&self.render_pipeline);
+            // render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            // render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16); // 1.
+            // render_pass.draw_indexed(0..self.num_indices, 0, 0..1); // 2.
+
             render_pass.set_pipeline(&self.render_pipeline);
+            // render_pass.set_bind_group(0, &bind_group, &[]);
+            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16); // 1.
-            render_pass.draw_indexed(0..self.num_indices, 0, 0..1); // 2.
+
+            // pass.draw_indexed(fill_range.clone(), 0, 0..(num_instances as u32));
+            render_pass.draw_indexed(self.stroke_range.clone(), 0, 0..1);
         }
 
         self.queue.submit(iter::once(encoder.finish()));
