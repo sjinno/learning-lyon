@@ -19,7 +19,7 @@ const VERTICES: &[Vertex] = &[
     //     color: [1.0, 0.0, 0.0],
     // },
     Vertex {
-        position: [-0.5, -0.5, 0.0],
+        position: [-1.0, 1.0, 0.0],
         color: [0.0, 1.0, 0.0],
     },
     Vertex {
@@ -27,6 +27,16 @@ const VERTICES: &[Vertex] = &[
         color: [0.0, 0.0, 1.0],
     },
 ];
+
+// #[cfg_attr(target_arch = "wasm32", wasm_bindgen(module = "../defined-in-js.js"))]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
+extern "C" {
+    fn hello_world() -> String;
+
+    fn get_window_width() -> u32;
+
+    fn get_window_height() -> u32;
+}
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -69,13 +79,14 @@ fn init_logger() {
     debug!("It works!");
 }
 
-fn create_canvas(window: &Window) {
+// #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
+fn create_canvas(window: &Window, width: u32, height: u32) {
     #[cfg(target_arch = "wasm32")]
     {
         // Winit prevents sizing with CSS, so we have to set
         // the size manually when on web.
         use winit::dpi::PhysicalSize;
-        window.set_inner_size(PhysicalSize::new(1024, 768));
+        window.set_inner_size(PhysicalSize::new(width * 2, height * 2));
 
         use winit::platform::web::WindowExtWebSys;
         web_sys::window()
@@ -315,12 +326,17 @@ impl State {
 pub async fn run() {
     init_logger();
 
+    // let hw = unsafe { hello_world() };
+    // info!("{}", hw);
+
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new().build(&event_loop).unwrap();
 
     cfg_if::cfg_if! {
         if #[cfg(target_arch = "wasm32")] {
-            create_canvas(&window);
+            let width = unsafe { get_window_width() };
+            let height = unsafe { get_window_height() };
+            create_canvas(&window, width, height);
             info!("Canvas successfully created!");
         }
     }

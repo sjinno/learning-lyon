@@ -9,7 +9,14 @@
   </head>
   <body>
     <div id="wasm-example"></div>
+    <script src="./defined-in-js.js"></script>
     <script type="module">
+      console.log(`width ${get_window_width()}`);
+
+      window.addEventListener('resize', (event) => {
+        console.log('SHOHEI@index.html:17: HELLO');
+      });
+
       // const canvas = document.getElementById('canvas');
       // const scale = 2;
       // canvas.width = 1280 * scale;
