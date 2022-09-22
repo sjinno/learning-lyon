@@ -1,6 +1,12 @@
 use std::iter;
 
-use lyon::geom::{CubicBezierSegment, Point};
+extern crate lyon;
+use lyon::math::{point, Point};
+use lyon::path::builder::*;
+use lyon::path::Path;
+use lyon::tessellation::*;
+
+// use lyon::geom::{CubicBezierSegment, Point};
 use wgpu::util::DeviceExt;
 use winit::{
     event::*,
@@ -32,9 +38,7 @@ const VERTICES: &[Vertex] = &[
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 extern "C" {
     fn hello_world() -> String;
-
     fn get_window_width() -> u32;
-
     fn get_window_height() -> u32;
 }
 
@@ -86,7 +90,7 @@ fn create_canvas(window: &Window, width: u32, height: u32) {
         // Winit prevents sizing with CSS, so we have to set
         // the size manually when on web.
         use winit::dpi::PhysicalSize;
-        window.set_inner_size(PhysicalSize::new(width * 2, height * 2));
+        window.set_inner_size(PhysicalSize::new(width / 2, height / 2));
 
         use winit::platform::web::WindowExtWebSys;
         web_sys::window()
@@ -110,48 +114,95 @@ struct State {
     render_pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
     num_vertices: u32,
+    index_buffer: wgpu::Buffer,
+    num_indices: u32,
 }
 
 impl State {
     // Creating some of the wgpu types requires async code
     async fn new(window: &Window) -> Self {
-        let cb_curve = CubicBezierSegment {
-            from: Point {
-                x: VERTICES[0].position[0],
-                y: VERTICES[0].position[1],
-                ..Default::default()
-            },
-            ctrl1: Point {
-                x: VERTICES[0].position[0] + 0.3,
-                y: VERTICES[0].position[1] - 0.5,
-                ..Default::default()
-            },
-            ctrl2: Point {
-                x: VERTICES[0].position[0] + 0.4,
-                y: VERTICES[0].position[1] + 0.8,
-                ..Default::default()
-            },
-            to: Point {
-                x: VERTICES[1].position[0],
-                y: VERTICES[1].position[1],
-                ..Default::default()
-            },
-        };
+        // let cb_curve = CubicBezierSegment {
+        //     from: Point {
+        //         x: VERTICES[0].position[0],
+        //         y: VERTICES[0].position[1],
+        //         ..Default::default()
+        //     },
+        //     ctrl1: Point {
+        //         x: VERTICES[0].position[0] + 0.3,
+        //         y: VERTICES[0].position[1] - 0.5,
+        //         ..Default::default()
+        //     },
+        //     ctrl2: Point {
+        //         x: VERTICES[0].position[0] + 0.4,
+        //         y: VERTICES[0].position[1] + 0.8,
+        //         ..Default::default()
+        //     },
+        //     to: Point {
+        //         x: VERTICES[1].position[0],
+        //         y: VERTICES[1].position[1],
+        //         ..Default::default()
+        //     },
+        // };
 
-        let flattened = cb_curve.flattened(0.002);
-        // while let Some(p) = flattened.next() {
-        //     eprintln!("{:?}", p);
-        // }
+        // let flattened = cb_curve.flattened(0.002);
+        // // while let Some(p) = flattened.next() {
+        // //     eprintln!("{:?}", p);
+        // // }
 
-        let vertices = flattened
-            .into_iter()
-            .map(|p| Vertex {
-                position: [p.x, p.y, 0.0],
-                color: [1.0, 0.0, 0.0],
-            })
-            .collect::<Vec<Vertex>>();
+        // let vertices = flattened
+        //     .into_iter()
+        //     .map(|p| Vertex {
+        //         position: [p.x, p.y, 0.0],
+        //         color: [1.0, 0.0, 0.0],
+        //     })
+        //     .collect::<Vec<Vertex>>();
 
-        let size = window.inner_size();
+        // Build a Path.
+        let mut builder = Path::builder();
+        builder.begin(point(0.0, 0.0));
+        builder.line_to(point(1.0, 0.0));
+        builder.quadratic_bezier_to(point(2.0, 0.0), point(2.0, 1.0));
+        builder.cubic_bezier_to(point(1.0, 1.0), point(0.0, 1.0), point(0.0, 0.0));
+        builder.close();
+        let path = builder.build();
+
+        // // Let's use our own custom vertex type instead of the default one.
+        // #[derive(Copy, Clone, Debug)]
+        // struct MyVertex {
+        //     position: [f32; 2],
+        // };
+
+        // Will contain the result of the tessellation.
+        let mut geometry: VertexBuffers<Vertex, u16> = VertexBuffers::new();
+
+        let mut tessellator = FillTessellator::new();
+
+        {
+            // Compute the tessellation.
+            tessellator
+                .tessellate_path(
+                    &path,
+                    &FillOptions::default(),
+                    &mut BuffersBuilder::new(&mut geometry, |vertex: FillVertex| Vertex {
+                        position: [vertex.position().x / 2.5, vertex.position().y / 2.5, 0.0],
+                        color: [1.0, 1.0, 0.0],
+                    }),
+                )
+                .unwrap();
+        }
+
+        // // The tessellated geometry is ready to be uploaded to the GPU.
+        // println!(
+        //     " -- {} vertices {} indices",
+        //     geometry.vertices.len(),
+        //     geometry.indices.len()
+        // );
+
+        let vertices = geometry.vertices;
+        eprintln!("VERTICES {vertices:?}");
+
+        let indices = geometry.indices;
+        eprintln!("INDICES {indices:?}");
 
         let instance = wgpu::Instance::new(wgpu::Backends::all());
         let surface = unsafe { instance.create_surface(window) };
@@ -180,6 +231,7 @@ impl State {
             .await
             .unwrap();
 
+        let size = window.inner_size();
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface.get_supported_formats(&adapter)[0],
@@ -221,7 +273,7 @@ impl State {
                 })],
             }),
             primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::LineStrip, // 1.
+                topology: wgpu::PrimitiveTopology::TriangleStrip, // 1.
                 strip_index_format: None,
                 front_face: wgpu::FrontFace::Ccw, // 2.
                 cull_mode: Some(wgpu::Face::Back),
@@ -246,8 +298,14 @@ impl State {
             contents: bytemuck::cast_slice(&vertices),
             usage: wgpu::BufferUsages::VERTEX,
         });
-
         let num_vertices = vertices.len() as u32;
+
+        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Index Buffer"),
+            contents: bytemuck::cast_slice(&indices),
+            usage: wgpu::BufferUsages::INDEX,
+        });
+        let num_indices = indices.len() as u32;
 
         Self {
             surface,
@@ -258,6 +316,8 @@ impl State {
             render_pipeline,
             vertex_buffer,
             num_vertices,
+            index_buffer,
+            num_indices,
         }
     }
 
@@ -308,11 +368,16 @@ impl State {
                 depth_stencil_attachment: None,
             });
 
-            render_pass.set_pipeline(&self.render_pipeline);
-            // render_pass.draw(0..3, 0..1);
+            // render_pass.set_pipeline(&self.render_pipeline);
+            // // render_pass.draw(0..3, 0..1);
 
+            // render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            // render_pass.draw(0..self.num_vertices, 0..1);
+
+            render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            render_pass.draw(0..self.num_vertices, 0..1);
+            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16); // 1.
+            render_pass.draw_indexed(0..self.num_indices, 0, 0..1); // 2.
         }
 
         self.queue.submit(iter::once(encoder.finish()));
@@ -326,8 +391,12 @@ impl State {
 pub async fn run() {
     init_logger();
 
-    // let hw = unsafe { hello_world() };
-    // info!("{}", hw);
+    cfg_if::cfg_if! {
+        if #[cfg(target_arch = "wasm32")] {
+            let hw = unsafe { hello_world() };
+            info!("SHOHEI: hw {}", hw);
+        }
+    }
 
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new().build(&event_loop).unwrap();
@@ -336,6 +405,8 @@ pub async fn run() {
         if #[cfg(target_arch = "wasm32")] {
             let width = unsafe { get_window_width() };
             let height = unsafe { get_window_height() };
+            info!("SHOHEI: width; {}", width);
+            info!("SHOHEI: height; {}", height);
             create_canvas(&window, width, height);
             info!("Canvas successfully created!");
         }
@@ -363,6 +434,7 @@ pub async fn run() {
                             ..
                         } => *control_flow = ControlFlow::Exit,
                         WindowEvent::Resized(physical_size) => {
+                            info!("SHOHEI: resizing...");
                             state.resize(*physical_size);
                         }
                         WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
