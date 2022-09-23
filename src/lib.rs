@@ -2,8 +2,7 @@ use std::iter;
 
 use lyon::lyon_tessellation::{BuffersBuilder, FillVertex, StrokeOptions, StrokeVertex};
 use lyon::math::{point, Box2D, Point};
-use lyon::path::Path;
-use lyon::path::{builder::BorderRadii, Winding};
+use lyon::path::{builder::BorderRadii, Event as PathEvent, Path, PathSlice, Winding};
 use lyon::tessellation::geometry_builder::simple_builder;
 use lyon::tessellation::{FillOptions, FillTessellator, StrokeTessellator, VertexBuffers};
 
@@ -115,8 +114,8 @@ struct State {
     render_pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
     num_vertices: u32,
-    index_buffer: wgpu::Buffer,
-    num_indices: u32,
+    // index_buffer: wgpu::Buffer,
+    // num_indices: u32,
 }
 
 impl State {
@@ -230,6 +229,51 @@ impl State {
         builder.close();
         let path = builder.build();
 
+        let mut vertices: Vec<Vertex> = vec![];
+        for p in path.iter() {
+            match p {
+                // Event::Begin { at: Endpoint } => {}
+                PathEvent::Line { from, .. } => vertices.push(Vertex {
+                    position: [from.x / 3.0, from.y / 3.0, 0.0],
+                    color: [1.0, 1.0, 0.0],
+                }),
+                PathEvent::End { last, first, .. } => {
+                    vertices.push(Vertex {
+                        position: [last.x / 3.0, last.y / 3.0, 0.0],
+                        color: [1.0, 1.0, 0.0],
+                    });
+                    vertices.push(Vertex {
+                        position: [first.x / 3.0, first.y / 3.0, 0.0],
+                        color: [1.0, 1.0, 0.0],
+                    })
+                }
+                _ => continue, // Event::Quadratic {
+                               //     from: Endpoint,
+                               //     ctrl: ControlPoint,
+                               //     to: Endpoint,
+                               // } => {}
+                               // Event::Cubic {
+                               //     from: Endpoint,
+                               //     ctrl1: ControlPoint,
+                               //     ctrl2: ControlPoint,
+                               //     to: Endpoint,
+                               // } => {}
+                               // Event::End {
+                               //     last: Endpoint,
+                               //     first: Endpoint,
+                               //     close: bool,
+                               // } => {}
+            }
+        }
+
+        // let vertices = points
+        //     .into_iter()
+        //     .map(|p| Vertex {
+        //         position: [p.x / 3.0, p.y / 3.0, 0.0],
+        //         color: [1.0, 1.0, 0.0],
+        //     })
+        //     .collect::<Vec<Vertex>>();
+
         // // // Bézierish curve... Nope.
         // let mut builder = Path::builder();
         // builder.begin(point(0.0, 0.0));
@@ -239,27 +283,31 @@ impl State {
         // builder.close();
         // let path = builder.build();
 
-        {
-            fill_tess
-                .tessellate_path(
-                    &path,
-                    &FillOptions::tolerance(0.01),
-                    &mut BuffersBuilder::new(&mut geometry, |vertex: FillVertex| Vertex {
-                        position: [vertex.position().x / 5.0, vertex.position().y / 5.0, 0.0],
-                        color: [1.0, 1.0, 0.0],
-                    }),
-                )
-                .unwrap();
-            // let mut stroke_tess = StrokeTessellator::new();
-            // let _ = stroke_tess.tessellate(
-            //     &path,
-            //     &StrokeOptions::default(),
-            //     &mut BuffersBuilder::new(&mut geometry, |vertex: StrokeVertex| Vertex {
-            //         position: [vertex.position().x / 5.0, vertex.position().y / 5.0, 0.0],
-            //         color: [1.0, 1.0, 0.0],
-            //     }),
-            // );
-        }
+        // for p in &path {
+        //     eprintln!("{:?}", p);
+        // }
+
+        // {
+        //     // fill_tess
+        //     //     .tessellate_path(
+        //     //         &path,
+        //     //         &FillOptions::tolerance(0.01),
+        //     //         &mut BuffersBuilder::new(&mut geometry, |vertex: FillVertex| Vertex {
+        //     //             position: [vertex.position().x / 5.0, vertex.position().y / 5.0, 0.0],
+        //     //             color: [1.0, 1.0, 0.0],
+        //     //         }),
+        //     //     )
+        //     //     .unwrap();
+        //     let mut stroke_tess = StrokeTessellator::new();
+        //     let _ = stroke_tess.tessellate(
+        //         &path,
+        //         &StrokeOptions::default(),
+        //         &mut BuffersBuilder::new(&mut geometry, |vertex: StrokeVertex| Vertex {
+        //             position: [vertex.position().x / 5.0, vertex.position().y / 5.0, 0.0],
+        //             color: [1.0, 1.0, 0.0],
+        //         }),
+        //     );
+        // }
 
         // let vertices = geometry
         //     .vertices
@@ -269,11 +317,11 @@ impl State {
         //         color: [1.0, 1.0, 0.0],
         //     })
         //     .collect::<Vec<Vertex>>();
-        let vertices = geometry.vertices;
-        eprintln!("VERTICES {vertices:#?}");
+        // let vertices = geometry.vertices;
+        // eprintln!("VERTICES {vertices:#?}");
 
-        let indices = geometry.indices;
-        eprintln!("INDICES {indices:?}");
+        // let indices = geometry.indices;
+        // eprintln!("INDICES {indices:?}");
 
         let instance = wgpu::Instance::new(wgpu::Backends::all());
         let surface = unsafe { instance.create_surface(window) };
@@ -345,7 +393,7 @@ impl State {
                 })],
             }),
             primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleStrip, // 1.
+                topology: wgpu::PrimitiveTopology::LineStrip, // 1.
                 strip_index_format: None,
                 polygon_mode: wgpu::PolygonMode::Fill,
                 ..Default::default() // front_face: wgpu::FrontFace::Ccw, // 2.
@@ -373,12 +421,12 @@ impl State {
         });
         let num_vertices = vertices.len() as u32;
 
-        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Index Buffer"),
-            contents: bytemuck::cast_slice(&indices),
-            usage: wgpu::BufferUsages::INDEX,
-        });
-        let num_indices = indices.len() as u32;
+        // let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        //     label: Some("Index Buffer"),
+        //     contents: bytemuck::cast_slice(&indices),
+        //     usage: wgpu::BufferUsages::INDEX,
+        // });
+        // let num_indices = indices.len() as u32;
 
         Self {
             surface,
@@ -389,8 +437,8 @@ impl State {
             render_pipeline,
             vertex_buffer,
             num_vertices,
-            index_buffer,
-            num_indices,
+            // index_buffer,
+            // num_indices,
         }
     }
 
@@ -441,16 +489,16 @@ impl State {
                 depth_stencil_attachment: None,
             });
 
-            // render_pass.set_pipeline(&self.render_pipeline);
-            // // render_pass.draw(0..3, 0..1);
-
-            // render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            // render_pass.draw(0..self.num_vertices, 0..1);
-
             render_pass.set_pipeline(&self.render_pipeline);
+            // render_pass.draw(0..3, 0..1);
+
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16); // 1.
-            render_pass.draw_indexed(0..self.num_indices, 0, 0..1); // 2.
+            render_pass.draw(0..self.num_vertices, 0..1);
+
+            // render_pass.set_pipeline(&self.render_pipeline);
+            // render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            // render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16); // 1.
+            // render_pass.draw_indexed(0..self.num_indices, 0, 0..1); // 2.
         }
 
         self.queue.submit(iter::once(encoder.finish()));
