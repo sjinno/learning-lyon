@@ -1,10 +1,11 @@
 use std::iter;
 
-extern crate lyon;
-use lyon::math::{point, Point};
-use lyon::path::builder::*;
+use lyon::lyon_tessellation::{BuffersBuilder, FillVertex, StrokeOptions, StrokeVertex};
+use lyon::math::{point, Box2D, Point};
 use lyon::path::Path;
-use lyon::tessellation::{self, *};
+use lyon::path::{builder::BorderRadii, Winding};
+use lyon::tessellation::geometry_builder::simple_builder;
+use lyon::tessellation::{FillOptions, FillTessellator, StrokeTessellator, VertexBuffers};
 
 // use lyon::geom::{CubicBezierSegment, Point};
 use wgpu::util::DeviceExt;
@@ -116,7 +117,6 @@ struct State {
     num_vertices: u32,
     index_buffer: wgpu::Buffer,
     num_indices: u32,
-    stroke_range: std::ops::Range<u32>,
 }
 
 impl State {
@@ -158,60 +158,29 @@ impl State {
         //     })
         //     .collect::<Vec<Vertex>>();
 
-        // Build a Path.
-        let mut builder = Path::builder();
-        builder.begin(point(0.0, 0.0));
-        builder.line_to(point(1.0, 0.0));
-        builder.quadratic_bezier_to(point(2.0, 0.0), point(2.0, 1.0));
-        builder.cubic_bezier_to(point(1.0, 1.0), point(0.0, 1.0), point(0.0, 0.0));
-        builder.close();
-        let path = builder.build();
+        // // Example 2
+        // let mut geometry: VertexBuffers<Point, u16> = VertexBuffers::new();
+        // let mut geometry_builder = simple_builder(&mut geometry);
+        // let options = FillOptions::tolerance(0.1);
+        // let mut tessellator = FillTessellator::new();
 
-        // // Let's use our own custom vertex type instead of the default one.
-        // #[derive(Copy, Clone, Debug)]
-        // struct MyVertex {
-        //     position: [f32; 2],
-        // };
+        // let mut builder = tessellator.builder(&options, &mut geometry_builder);
 
-        // Will contain the result of the tessellation.
-        let mut geometry: VertexBuffers<Vertex, u16> = VertexBuffers::new();
+        // builder.add_rounded_rectangle(
+        //     &Box2D {
+        //         min: point(0.0, 0.0),
+        //         max: point(100.0, 1.0),
+        //     },
+        //     &BorderRadii {
+        //         top_left: 0.0,
+        //         top_right: 0.0,
+        //         bottom_left: 0.0,
+        //         bottom_right: 0.0,
+        //     },
+        //     Winding::Positive,
+        // );
 
-        // let mut tessellator = StrokeTessellator::new();
-
-        let mut fill_tess = FillTessellator::new();
-        let mut stroke_tess = StrokeTessellator::new();
-
-        {
-            // Compute the tessellation.
-            fill_tess
-                .tessellate_path(
-                    &path,
-                    &FillOptions::default(),
-                    &mut BuffersBuilder::new(&mut geometry, |vertex: FillVertex| Vertex {
-                        position: [vertex.position().x / 2.5, vertex.position().y / 2.5, 0.0],
-                        color: [1.0, 1.0, 0.0],
-                    }),
-                )
-                .unwrap();
-        }
-
-        let fill_range = 0..(geometry.indices.len() as u32);
-
-        {
-            // Compute the tessellation.
-            stroke_tess
-                .tessellate_path(
-                    &path,
-                    &StrokeOptions::default(),
-                    &mut BuffersBuilder::new(&mut geometry, |vertex: StrokeVertex| Vertex {
-                        position: [vertex.position().x / 2.5, vertex.position().y / 2.5, 0.0],
-                        color: [1.0, 1.0, 0.0],
-                    }),
-                )
-                .unwrap();
-        }
-
-        let stroke_range = fill_range.end..(geometry.indices.len() as u32);
+        // let _ = builder.build();
 
         // // The tessellated geometry is ready to be uploaded to the GPU.
         // println!(
@@ -220,6 +189,86 @@ impl State {
         //     geometry.indices.len()
         // );
 
+        // // Create a simple path.
+        // let mut path_builder = Path::builder();
+        // path_builder.begin(point(0.0, 0.0));
+        // path_builder.line_to(point(1.0, 2.0));
+        // path_builder.line_to(point(2.0, 0.0));
+        // path_builder.line_to(point(1.0, 1.0));
+        // path_builder.end(true);
+        // let path = path_builder.build();
+
+        // // Create the destination vertex and index buffers.
+        // let mut buffers: VertexBuffers<Point, u16> = VertexBuffers::new();
+
+        // {
+        //     // Create the destination vertex and index buffers.
+        //     let mut vertex_builder = simple_builder(&mut buffers);
+
+        //     // Create the tessellator.
+        //     let mut tessellator = StrokeTessellator::new();
+
+        //     // Compute the tessellation.
+        //     let _ = tessellator.tessellate(&path, &StrokeOptions::default(), &mut vertex_builder);
+        // }
+
+        // println!("The generated vertices are: {:?}.", &buffers.vertices[..]);
+        // println!("The generated indices are: {:?}.", &buffers.indices[..]);
+
+        let mut geometry: VertexBuffers<Vertex, u16> = VertexBuffers::new();
+        let mut fill_tess = FillTessellator::new();
+
+        // Build a Path for the arrow.
+        let mut builder = Path::builder();
+        builder.begin(point(-1.0, -0.2));
+        builder.line_to(point(0.5, -0.2));
+        builder.line_to(point(0.5, -0.7));
+        builder.line_to(point(1.5, 0.0));
+        builder.line_to(point(0.5, 0.7));
+        builder.line_to(point(0.5, 0.2));
+        builder.line_to(point(-1.0, 0.2));
+        builder.close();
+        let path = builder.build();
+
+        // // // Bézierish curve... Nope.
+        // let mut builder = Path::builder();
+        // builder.begin(point(0.0, 0.0));
+        // builder.cubic_bezier_to(point(0.5, -0.8), point(1.0, -1.3), point(2.0, 1.0));
+        // builder.line_to(point(2.0, 1.1));
+        // builder.cubic_bezier_to(point(1.0, -1.2), point(0.5, -0.7), point(0.0, 0.1));
+        // builder.close();
+        // let path = builder.build();
+
+        {
+            fill_tess
+                .tessellate_path(
+                    &path,
+                    &FillOptions::tolerance(0.01),
+                    &mut BuffersBuilder::new(&mut geometry, |vertex: FillVertex| Vertex {
+                        position: [vertex.position().x / 5.0, vertex.position().y / 5.0, 0.0],
+                        color: [1.0, 1.0, 0.0],
+                    }),
+                )
+                .unwrap();
+            // let mut stroke_tess = StrokeTessellator::new();
+            // let _ = stroke_tess.tessellate(
+            //     &path,
+            //     &StrokeOptions::default(),
+            //     &mut BuffersBuilder::new(&mut geometry, |vertex: StrokeVertex| Vertex {
+            //         position: [vertex.position().x / 5.0, vertex.position().y / 5.0, 0.0],
+            //         color: [1.0, 1.0, 0.0],
+            //     }),
+            // );
+        }
+
+        // let vertices = geometry
+        //     .vertices
+        //     .into_iter()
+        //     .map(|p| Vertex {
+        //         position: [p.x / 3.0, p.y / 3.0, 0.0],
+        //         color: [1.0, 1.0, 0.0],
+        //     })
+        //     .collect::<Vec<Vertex>>();
         let vertices = geometry.vertices;
         eprintln!("VERTICES {vertices:#?}");
 
@@ -342,7 +391,6 @@ impl State {
             num_vertices,
             index_buffer,
             num_indices,
-            stroke_range,
         }
     }
 
@@ -399,18 +447,10 @@ impl State {
             // render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             // render_pass.draw(0..self.num_vertices, 0..1);
 
-            // render_pass.set_pipeline(&self.render_pipeline);
-            // render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            // render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16); // 1.
-            // render_pass.draw_indexed(0..self.num_indices, 0, 0..1); // 2.
-
             render_pass.set_pipeline(&self.render_pipeline);
-            // render_pass.set_bind_group(0, &bind_group, &[]);
-            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-
-            // pass.draw_indexed(fill_range.clone(), 0, 0..(num_instances as u32));
-            render_pass.draw_indexed(self.stroke_range.clone(), 0, 0..1);
+            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16); // 1.
+            render_pass.draw_indexed(0..self.num_indices, 0, 0..1); // 2.
         }
 
         self.queue.submit(iter::once(encoder.finish()));
